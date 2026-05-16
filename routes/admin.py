@@ -225,3 +225,44 @@ async def upload_csv_confirm(
                 [(name, klass, default_tokens) for name, klass in rows],
             )
     return {"inserted": len(rows)}
+
+
+@router.post("/reset-tokens")
+async def reset_tokens(
+    request: Request, _: dict = Depends(require_admin)
+) -> dict[str, int]:
+    pool = request.app.state.pool
+    default_tokens = int(
+        await _get_setting(pool, "default_tokens", str(DEFAULT_TOKENS))
+    )
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            student_rows = await conn.fetch("SELECT id, tokens FROM students")
+            await conn.execute("UPDATE students SET tokens = $1", default_tokens)
+            await conn.executemany(
+                "INSERT INTO transactions (student_id, amount, type, note) "
+                "VALUES ($1, $2, 'reset', $3)",
+                [(r["id"], default_tokens, f"prior balance: {r['tokens']}") for r in student_rows],
+            )
+    return {"affected": len(student_rows)}
+
+
+@router.post("/reset-tallies")
+async def reset_tallies(
+    request: Request, _: dict = Depends(require_admin)
+) -> dict[str, str]:
+    async with request.app.state.pool.acquire() as conn:
+        await conn.execute("UPDATE booths SET tally = 0")
+    return {"status": "ok"}
+
+
+@router.post("/full-reset")
+async def full_reset(
+    request: Request, _: dict = Depends(require_admin)
+) -> dict[str, str]:
+    async with request.app.state.pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("DELETE FROM transactions")
+            await conn.execute("DELETE FROM students")
+            await conn.execute("UPDATE booths SET tally = 0")
+    return {"status": "ok"}

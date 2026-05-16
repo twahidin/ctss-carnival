@@ -1,6 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
 
 from auth import require_role
 
@@ -53,3 +54,60 @@ async def student_detail(
             for h in history
         ],
     }
+
+
+class BalanceOp(BaseModel):
+    student_id: int
+    amount: int = Field(gt=0, le=10_000)
+    note: str = Field(min_length=3, max_length=200)
+
+
+async def _apply_balance_change(pool, *, student_id: int, delta: int, type_: str, note: str) -> int:
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            s = await conn.fetchrow(
+                "SELECT tokens FROM students WHERE id = $1 FOR UPDATE", student_id
+            )
+            if not s:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Student not found")
+            new_balance = s["tokens"] + delta
+            if new_balance < 0:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    f"Cannot reduce below 0 (current: {s['tokens']})",
+                )
+            await conn.execute(
+                "UPDATE students SET tokens = $1 WHERE id = $2",
+                new_balance, student_id,
+            )
+            await conn.execute(
+                "INSERT INTO transactions (student_id, amount, type, note) "
+                "VALUES ($1, $2, $3, $4)",
+                student_id, abs(delta), type_, note,
+            )
+    # Invalidate the booth-side students cache so the next search shows the new balance.
+    from routes.booth import _invalidate_students_cache
+    _invalidate_students_cache()
+    return new_balance
+
+
+@router.post("/refund")
+async def refund(
+    body: BalanceOp, request: Request, _: dict = Depends(require_teacher)
+) -> dict[str, int]:
+    new_balance = await _apply_balance_change(
+        request.app.state.pool,
+        student_id=body.student_id, delta=body.amount, type_="refund", note=body.note,
+    )
+    return {"new_balance": new_balance}
+
+
+@router.post("/deduct")
+async def deduct(
+    body: BalanceOp, request: Request, _: dict = Depends(require_teacher)
+) -> dict[str, int]:
+    new_balance = await _apply_balance_change(
+        request.app.state.pool,
+        student_id=body.student_id, delta=-body.amount, type_="deduct", note=body.note,
+    )
+    return {"new_balance": new_balance}

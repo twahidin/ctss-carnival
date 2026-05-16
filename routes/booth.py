@@ -124,3 +124,63 @@ async def pay(
             )
     _invalidate_students_cache()
     return {"transaction_id": tx_id, "new_balance": new_balance}
+
+
+class UndoBody(BaseModel):
+    transaction_id: int
+
+
+@router.post("/undo")
+async def undo(
+    body: UndoBody, request: Request, session: dict = Depends(require_booth)
+) -> dict[str, Any]:
+    booth_id = session["booth_id"]
+    pool = request.app.state.pool
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            tx = await conn.fetchrow(
+                """
+                SELECT id, student_id, booth_id, amount, type, reversed_by,
+                       created_at, EXTRACT(EPOCH FROM (NOW() - created_at)) AS age
+                FROM transactions WHERE id = $1 FOR UPDATE
+                """,
+                body.transaction_id,
+            )
+            if not tx:
+                raise _api_error("Transaction not found", "TX_NOT_FOUND", 404)
+            if tx["booth_id"] != booth_id:
+                raise _api_error("Wrong booth", "WRONG_BOOTH", 403)
+            if tx["type"] != "play":
+                raise _api_error("Only plays can be undone", "NOT_A_PLAY", 409)
+            if tx["reversed_by"] is not None:
+                raise _api_error("Already undone", "ALREADY_UNDONE", 409)
+            if tx["age"] > 60:
+                raise _api_error("Undo window expired (60s)", "UNDO_EXPIRED", 409)
+
+            await conn.execute(
+                "SELECT id FROM students WHERE id = $1 FOR UPDATE",
+                tx["student_id"],
+            )
+            await conn.execute(
+                "UPDATE students SET tokens = tokens + $1 WHERE id = $2",
+                tx["amount"], tx["student_id"],
+            )
+            await conn.execute(
+                "UPDATE booths SET tally = tally - $1 WHERE id = $2",
+                tx["amount"], booth_id,
+            )
+            undo_id = await conn.fetchval(
+                """
+                INSERT INTO transactions (student_id, booth_id, amount, type, note)
+                VALUES ($1, $2, $3, 'undo', $4)
+                RETURNING id
+                """,
+                tx["student_id"], booth_id, tx["amount"],
+                f"undo of tx #{body.transaction_id}",
+            )
+            await conn.execute(
+                "UPDATE transactions SET reversed_by = $1 WHERE id = $2",
+                undo_id, body.transaction_id,
+            )
+    _invalidate_students_cache()
+    return {"undo_transaction_id": undo_id}

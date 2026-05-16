@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carnival · Summary</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/static/shared.js" defer></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <div id="app" class="max-w-3xl mx-auto p-4"></div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const app = document.getElementById('app');
+      let lastFetch = null;
+
+      async function load() {
+        const [s, t] = await Promise.all([
+          api('GET', '/api/summary'),
+          api('GET', '/api/summary/top-spenders'),
+        ]);
+        lastFetch = new Date();
+        return { s, t };
+      }
+
+      function render({ s, t }) {
+        app.innerHTML = `
+          <h1 class="text-2xl font-bold mb-1">Summary</h1>
+          <p class="text-xs text-gray-500 mb-4">Updated ${lastFetch.toLocaleTimeString()}</p>
+          <h2 class="font-semibold mb-1">By class</h2>
+          <table class="w-full text-sm mb-4 bg-white border rounded">
+            <thead><tr class="text-left border-b"><th class="p-2">Class</th><th class="p-2">Students</th><th class="p-2">Spent</th><th class="p-2">Remaining</th></tr></thead>
+            <tbody>${s.by_class.map(r => `<tr class="border-b"><td class="p-2">${r.class}</td><td class="p-2">${r.total_students}</td><td class="p-2">${r.total_spent}</td><td class="p-2">${r.total_remaining}</td></tr>`).join('')}</tbody>
+          </table>
+          <h2 class="font-semibold mb-1">By booth</h2>
+          <table class="w-full text-sm mb-4 bg-white border rounded">
+            <thead><tr class="text-left border-b"><th class="p-2">Booth</th><th class="p-2">Plays</th><th class="p-2">Tally</th><th class="p-2">Top class</th></tr></thead>
+            <tbody>${s.by_booth.map(r => `<tr class="border-b"><td class="p-2">${r.name}</td><td class="p-2">${r.tx_count}</td><td class="p-2">${r.tally}</td><td class="p-2">${r.top_class || '—'}</td></tr>`).join('')}</tbody>
+          </table>
+          <h2 class="font-semibold mb-1">Top spenders</h2>
+          <ol class="bg-white border rounded text-sm">${t.map((r,i) => `<li class="border-b p-2 flex justify-between"><span>${i+1}. ${r.name} <span class="text-gray-500">· ${r.class}</span></span><span class="font-mono">${r.spent}</span></li>`).join('')}</ol>`;
+      }
+
+      async function tick() {
+        try { render(await load()); } catch (e) {
+          if (e.message.includes('Login')) {
+            app.innerHTML = `<div class="mt-12 max-w-xs mx-auto"><p class="mb-3">Log in via <a class="underline" href="/admin">/admin</a> first.</p></div>`;
+            return;
+          }
+          toast(e.message, 'error');
+        }
+      }
+      tick();
+      setInterval(tick, 5000);
+    });
+  </script>
+</body>
+</html>

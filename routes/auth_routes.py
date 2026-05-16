@@ -14,8 +14,13 @@ _WINDOW = 60.0
 _LIMIT = 10
 
 
-def _rate_limit(request: Request) -> None:
-    ip = request.client.host if request.client else "unknown"
+def _get_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _check_rate_limit(request: Request) -> None:
+    """Raise 429 if this IP has too many recent failures. Does NOT record an attempt."""
+    ip = _get_ip(request)
     now = time.time()
     bucket = _attempts[ip]
     while bucket and now - bucket[0] > _WINDOW:
@@ -24,7 +29,12 @@ def _rate_limit(request: Request) -> None:
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS, "Too many login attempts"
         )
-    bucket.append(now)
+
+
+def _record_failure(request: Request) -> None:
+    """Record a failed login attempt for rate-limiting purposes."""
+    ip = _get_ip(request)
+    _attempts[ip].append(time.time())
 
 
 def _set_cookie(response: Response, cookie_value: str) -> None:
@@ -47,10 +57,11 @@ class LoginBody(BaseModel):
 async def admin_login(
     body: LoginBody, request: Request, response: Response
 ) -> dict[str, Any]:
-    _rate_limit(request)
+    _check_rate_limit(request)
     if not body.password or not await verify_password(
         request.app.state.pool, "admin", body.password
     ):
+        _record_failure(request)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid password")
     _set_cookie(response, make_session(role="admin"))
     return {"role": "admin"}
@@ -60,8 +71,9 @@ async def admin_login(
 async def teacher_login(
     body: LoginBody, request: Request, response: Response
 ) -> dict[str, Any]:
-    _rate_limit(request)
+    _check_rate_limit(request)
     if not body.password:
+        _record_failure(request)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid password")
     pool = request.app.state.pool
     if await verify_password(pool, "admin", body.password):
@@ -70,6 +82,7 @@ async def teacher_login(
     if await verify_password(pool, "teacher", body.password):
         _set_cookie(response, make_session(role="teacher"))
         return {"role": "teacher"}
+    _record_failure(request)
     raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid password")
 
 
@@ -77,8 +90,9 @@ async def teacher_login(
 async def booth_login(
     body: LoginBody, request: Request, response: Response
 ) -> dict[str, Any]:
-    _rate_limit(request)
+    _check_rate_limit(request)
     if not body.code:
+        _record_failure(request)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid code")
     async with request.app.state.pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -86,6 +100,7 @@ async def booth_login(
             body.code,
         )
     if not row:
+        _record_failure(request)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid code")
     _set_cookie(response, make_session(role="booth", booth_id=row["id"]))
     return {"role": "booth", "booth": dict(row)}

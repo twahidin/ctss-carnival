@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from pydantic import BaseModel
 
 from auth import require_role
 
@@ -66,3 +67,60 @@ async def list_students(
     if if_none_match == etag:
         return Response(status_code=304, headers={"ETag": etag})
     return students
+
+
+class PayBody(BaseModel):
+    student_id: int
+
+
+def _api_error(detail: str, code: str, status_code: int) -> HTTPException:
+    return HTTPException(status_code, detail={"error": detail, "code": code})
+
+
+@router.post("/pay")
+async def pay(
+    body: PayBody, request: Request, session: dict = Depends(require_booth)
+) -> dict[str, Any]:
+    booth_id = session["booth_id"]
+    pool = request.app.state.pool
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            booth = await conn.fetchrow(
+                "SELECT cost_per_play FROM booths WHERE id = $1", booth_id
+            )
+            if not booth:
+                raise _api_error("Booth not found", "BOOTH_NOT_FOUND", 404)
+            cost = booth["cost_per_play"]
+            student = await conn.fetchrow(
+                "SELECT id, name, tokens, is_absent FROM students "
+                "WHERE id = $1 FOR UPDATE",
+                body.student_id,
+            )
+            if not student:
+                raise _api_error("Student not found", "STUDENT_NOT_FOUND", 404)
+            if student["is_absent"]:
+                raise _api_error(
+                    "Student is marked absent. Please see a teacher.",
+                    "STUDENT_ABSENT", 409,
+                )
+            if student["tokens"] < cost:
+                raise _api_error(
+                    f"Insufficient tokens (has {student['tokens']}, needs {cost})",
+                    "INSUFFICIENT_TOKENS", 409,
+                )
+            new_balance = student["tokens"] - cost
+            await conn.execute(
+                "UPDATE students SET tokens = $1 WHERE id = $2",
+                new_balance, body.student_id,
+            )
+            await conn.execute(
+                "UPDATE booths SET tally = tally + $1 WHERE id = $2",
+                cost, booth_id,
+            )
+            tx_id = await conn.fetchval(
+                "INSERT INTO transactions (student_id, booth_id, amount, type) "
+                "VALUES ($1, $2, $3, 'play') RETURNING id",
+                body.student_id, booth_id, cost,
+            )
+    _invalidate_students_cache()
+    return {"transaction_id": tx_id, "new_balance": new_balance}

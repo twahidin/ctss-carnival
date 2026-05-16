@@ -1,9 +1,12 @@
+import csv as _csv
+import io
 import re
 import secrets
 from collections import Counter
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from auth import require_role
@@ -266,3 +269,39 @@ async def full_reset(
             await conn.execute("DELETE FROM students")
             await conn.execute("UPDATE booths SET tally = 0")
     return {"status": "ok"}
+
+
+@router.get("/export-transactions")
+async def export_transactions(
+    request: Request, _: dict = Depends(require_admin)
+) -> StreamingResponse:
+    async with request.app.state.pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT t.id, t.created_at, s.name AS student_name, s.class AS klass,
+                   b.name AS booth_name, t.type, t.amount, t.note
+            FROM transactions t
+            LEFT JOIN students s ON s.id = t.student_id
+            LEFT JOIN booths   b ON b.id = t.booth_id
+            ORDER BY t.id
+            """
+        )
+
+    buf = io.StringIO()
+    writer = _csv.writer(buf)
+    writer.writerow(
+        ["id", "created_at", "student_name", "class", "booth_name",
+         "type", "amount", "note"]
+    )
+    for r in rows:
+        writer.writerow([
+            r["id"], r["created_at"].isoformat(),
+            r["student_name"] or "", r["klass"] or "",
+            r["booth_name"] or "", r["type"], r["amount"], r["note"] or "",
+        ])
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=transactions.csv"},
+    )

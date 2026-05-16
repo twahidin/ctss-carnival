@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carnival · Teacher</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/static/shared.js" defer></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <div id="app" class="max-w-md mx-auto p-3"></div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const app = document.getElementById('app');
+      let tab = 'find', students = [], byClass = [], current = null;
+
+      async function loadStudents() { students = await api('GET', '/api/teacher/students'); }
+      async function loadByClass()  { byClass  = await api('GET', '/api/teacher/students-by-class'); }
+      async function loadDetail(id) { current = await api('GET', `/api/teacher/student/${id}`); }
+
+      function render() {
+        app.innerHTML = `
+          <nav class="flex gap-2 mb-3">
+            ${['find','absentees'].map(t => `<button data-tab="${t}" class="flex-1 py-2 rounded ${tab===t?'bg-blue-600 text-white':'bg-gray-200'}">${t}</button>`).join('')}
+            <button id="logout" class="px-2 text-sm underline">out</button>
+          </nav>
+          <div id="panel"></div>`;
+        for (const b of app.querySelectorAll('[data-tab]')) b.onclick = () => { tab = b.dataset.tab; current = null; renderPanel(); };
+        document.getElementById('logout').onclick = async () => { await api('POST', '/api/teacher/logout'); location.reload(); };
+        renderPanel();
+      }
+
+      function renderPanel() {
+        const panel = document.getElementById('panel');
+        if (tab === 'find') renderFind(panel);
+        else renderAbsentees(panel);
+      }
+
+      function renderFind(panel) {
+        if (current) return renderDetail(panel);
+        panel.innerHTML = `<input id="q" placeholder="Search…" class="w-full border-2 rounded p-2 mb-2"><div id="results" class="space-y-1"></div>`;
+        const q = document.getElementById('q');
+        q.addEventListener('input', () => renderResults(q.value.toLowerCase()));
+        renderResults('');
+      }
+
+      function renderResults(q) {
+        const out = document.getElementById('results');
+        const matches = !q ? students.slice(0, 30) :
+          students.filter(s => s.name.toLowerCase().includes(q) || s.class.toLowerCase().includes(q)).slice(0, 30);
+        out.innerHTML = matches.map(s => `
+          <button data-id="${s.id}" class="w-full text-left flex justify-between bg-white border rounded p-2 ${s.is_absent ? 'opacity-60' : ''}">
+            <span>${s.name} <span class="text-gray-500">· ${s.class}</span>${s.is_absent ? ' <span class="text-xs bg-red-600 text-white px-1 rounded">ABS</span>' : ''}</span>
+            <span class="font-mono">${s.tokens}</span>
+          </button>`).join('');
+        for (const b of out.querySelectorAll('[data-id]')) {
+          b.onclick = async () => { await loadDetail(parseInt(b.dataset.id, 10)); renderPanel(); };
+        }
+      }
+
+      function renderDetail(panel) {
+        const s = current;
+        panel.innerHTML = `
+          <button id="back" class="text-sm underline mb-2">← back</button>
+          <h2 class="text-lg font-bold">${s.name} <span class="text-gray-500 text-base">· ${s.class}</span></h2>
+          <p>Balance: <strong>${s.tokens}</strong>${s.is_absent ? ' <span class="text-red-600">ABSENT</span>' : ''}</p>
+          <div class="grid grid-cols-2 gap-2 mt-3">
+            <button id="refund" class="bg-green-600 text-white py-3 rounded">Refund</button>
+            <button id="deduct" class="bg-orange-600 text-white py-3 rounded">Deduct</button>
+            <button id="abs" class="col-span-2 ${s.is_absent ? 'bg-blue-600' : 'bg-red-600'} text-white py-3 rounded">${s.is_absent ? 'Mark Present' : 'Mark Absent'}</button>
+          </div>
+          <h3 class="mt-4 font-semibold">History</h3>
+          <ul class="text-sm space-y-1">${s.history.map(h => `<li>${h.created_at.slice(11,16)} · ${h.type} · ${h.amount}${h.booth_name?` @ ${h.booth_name}`:''}${h.note?` — ${h.note}`:''}</li>`).join('')}</ul>`;
+        document.getElementById('back').onclick = () => { current = null; renderPanel(); };
+        const ask = async (label, url) => {
+          const amount = parseInt(prompt(`${label} amount?`) || '0', 10);
+          if (!amount) return;
+          const note = prompt('Note (required, min 3 chars)?') || '';
+          try {
+            await api('POST', url, { student_id: s.id, amount, note });
+            toast('Done');
+            await loadStudents(); await loadDetail(s.id); renderPanel();
+          } catch (e) { toast(e.message, 'error'); }
+        };
+        document.getElementById('refund').onclick = () => ask('Refund', '/api/teacher/refund');
+        document.getElementById('deduct').onclick = () => ask('Deduct', '/api/teacher/deduct');
+        document.getElementById('abs').onclick = async () => {
+          try {
+            await api('POST', '/api/teacher/absent', { student_id: s.id, is_absent: !s.is_absent });
+            toast('Updated');
+            await loadStudents(); await loadDetail(s.id); renderPanel();
+          } catch (e) { toast(e.message, 'error'); }
+        };
+      }
+
+      function renderAbsentees(panel) {
+        panel.innerHTML = byClass.map(g => `
+          <details class="bg-white border rounded mb-2">
+            <summary class="p-2 cursor-pointer font-semibold">${g.class} (${g.students.length})</summary>
+            <div class="p-2">
+              ${g.students.map(s => `<label class="flex items-center gap-2 py-1"><input type="checkbox" data-id="${s.id}" ${s.is_absent ? 'checked' : ''}> ${s.name}</label>`).join('')}
+            </div>
+          </details>`).join('') + `
+          <div class="flex gap-2 mt-3 sticky bottom-0 bg-gray-50 py-2">
+            <button id="mabs"  class="flex-1 bg-red-600 text-white py-3 rounded">Mark ticked ABSENT</button>
+            <button id="mpres" class="flex-1 bg-blue-600 text-white py-3 rounded">Mark ticked PRESENT</button>
+          </div>`;
+        const submit = async (is_absent) => {
+          const ids = Array.from(panel.querySelectorAll('input[type="checkbox"]:checked'), c => parseInt(c.dataset.id, 10));
+          if (!ids.length) return toast('Tick some students first', 'warn');
+          try {
+            const r = await api('POST', '/api/teacher/absent-bulk', { student_ids: ids, is_absent });
+            toast(`Updated ${r.affected}`);
+            await loadByClass(); await loadStudents(); renderPanel();
+          } catch (e) { toast(e.message, 'error'); }
+        };
+        document.getElementById('mabs').onclick = () => submit(true);
+        document.getElementById('mpres').onclick = () => submit(false);
+      }
+
+      async function showLogin() {
+        app.innerHTML = `
+          <div class="mt-12">
+            <h1 class="text-xl font-bold mb-4 text-center">Teacher login</h1>
+            <input id="pw" type="password" placeholder="Password" class="w-full border-2 rounded p-3 mb-3">
+            <button id="login" class="w-full bg-blue-600 text-white py-3 rounded">Log in</button>
+          </div>`;
+        document.getElementById('login').onclick = async () => {
+          try {
+            await api('POST', '/api/teacher/login', { password: document.getElementById('pw').value });
+            location.reload();
+          } catch (e) { toast(e.message, 'error'); }
+        };
+      }
+
+      (async () => {
+        try { await Promise.all([loadStudents(), loadByClass()]); render(); }
+        catch { showLogin(); }
+      })();
+    });
+  </script>
+</body>
+</html>

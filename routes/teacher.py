@@ -111,3 +111,61 @@ async def deduct(
         student_id=body.student_id, delta=-body.amount, type_="deduct", note=body.note,
     )
     return {"new_balance": new_balance}
+
+
+class AbsentBody(BaseModel):
+    student_id: int
+    is_absent: bool
+
+
+class AbsentBulkBody(BaseModel):
+    student_ids: list[int] = Field(min_length=1, max_length=1000)
+    is_absent: bool
+
+
+@router.post("/absent")
+async def absent(
+    body: AbsentBody, request: Request, _: dict = Depends(require_teacher)
+) -> dict[str, str]:
+    async with request.app.state.pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE students SET is_absent = $1 WHERE id = $2",
+            body.is_absent, body.student_id,
+        )
+    if result.endswith("0"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Student not found")
+    from routes.booth import _invalidate_students_cache
+    _invalidate_students_cache()
+    return {"status": "ok"}
+
+
+@router.post("/absent-bulk")
+async def absent_bulk(
+    body: AbsentBulkBody, request: Request, _: dict = Depends(require_teacher)
+) -> dict[str, int]:
+    async with request.app.state.pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE students SET is_absent = $1 WHERE id = ANY($2::int[])",
+            body.is_absent, body.student_ids,
+        )
+    affected = int(result.rsplit(" ", 1)[-1])
+    from routes.booth import _invalidate_students_cache
+    _invalidate_students_cache()
+    return {"affected": affected}
+
+
+@router.get("/students-by-class")
+async def students_by_class(
+    request: Request, _: dict = Depends(require_teacher)
+) -> list[dict[str, Any]]:
+    async with request.app.state.pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, name, class, tokens, is_absent FROM students "
+            "ORDER BY class, name"
+        )
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        grouped.setdefault(r["class"], []).append(
+            {"id": r["id"], "name": r["name"], "tokens": r["tokens"], "is_absent": r["is_absent"]}
+        )
+    return [{"class": k, "students": v} for k, v in grouped.items()]

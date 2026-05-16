@@ -1,6 +1,24 @@
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
-app = FastAPI(title="CTSS Carnival Token System")
+from db import init_pool, init_schema, close_pool
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    database_url = os.environ["DATABASE_URL"]
+    pool = await init_pool(database_url)
+    await init_schema(pool)
+    app.state.pool = pool
+    try:
+        yield
+    finally:
+        await close_pool(pool)
+
+
+app = FastAPI(title="CTSS Carnival Token System", lifespan=lifespan)
 
 
 @app.get("/health")

@@ -1,10 +1,13 @@
 import re
+import secrets
+from collections import Counter
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, Field
 
 from auth import require_role
+from csv_import import CsvImportError, parse_roster_csv
 
 router = APIRouter(prefix="/api/admin")
 require_admin = require_role("admin")
@@ -161,3 +164,64 @@ async def delete_booth(
     if result.endswith("0"):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Booth not found")
     return {"status": "ok"}
+
+
+_pending_uploads: dict[str, list[tuple[str, str]]] = {}
+MAX_CSV_BYTES = 1_000_000
+
+
+@router.post("/upload-csv")
+async def upload_csv_preview(
+    request: Request,
+    file: UploadFile = File(...),
+    _: dict = Depends(require_admin),
+) -> dict[str, Any]:
+    pool = request.app.state.pool
+    async with pool.acquire() as conn:
+        tx_count = await conn.fetchval("SELECT COUNT(*) FROM transactions")
+    if tx_count:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Cannot re-upload roster while transactions exist. Run Full Reset first.",
+        )
+    data = await file.read(MAX_CSV_BYTES + 1)
+    if len(data) > MAX_CSV_BYTES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "File too large (max 1MB)")
+    try:
+        rows = parse_roster_csv(data)
+    except CsvImportError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    token = secrets.token_urlsafe(16)
+    _pending_uploads[token] = rows
+    counts = Counter(klass for _, klass in rows)
+    return {
+        "row_count": len(rows),
+        "by_class": sorted(counts.items()),
+        "sample": rows[:5],
+        "token": token,
+    }
+
+
+class ConfirmBody(BaseModel):
+    token: str
+
+
+@router.post("/upload-csv/confirm")
+async def upload_csv_confirm(
+    body: ConfirmBody, request: Request, _: dict = Depends(require_admin)
+) -> dict[str, int]:
+    rows = _pending_uploads.pop(body.token, None)
+    if rows is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired token")
+    pool = request.app.state.pool
+    default_tokens = int(
+        await _get_setting(pool, "default_tokens", str(DEFAULT_TOKENS))
+    )
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("DELETE FROM students")
+            await conn.executemany(
+                "INSERT INTO students (name, class, tokens) VALUES ($1, $2, $3)",
+                [(name, klass, default_tokens) for name, klass in rows],
+            )
+    return {"inserted": len(rows)}

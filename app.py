@@ -34,6 +34,9 @@ app.include_router(booth_router)
 from routes.teacher import router as teacher_router
 app.include_router(teacher_router)
 
+from routes.summary import router as summary_router
+app.include_router(summary_router)
+
 
 @app.get("/health")
 async def health() -> dict[str, str]:

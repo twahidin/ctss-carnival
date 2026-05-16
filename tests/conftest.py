@@ -57,3 +57,13 @@ def reset_rate_limit():
         _attempts.clear()
     except ImportError:
         pass
+
+
+@pytest.fixture(autouse=True)
+def reset_booth_cache():
+    yield
+    try:
+        from routes.booth import _invalidate_students_cache
+        _invalidate_students_cache()
+    except ImportError:
+        pass

@@ -28,6 +28,9 @@ app.include_router(auth_router)
 from routes.admin import router as admin_router
 app.include_router(admin_router)
 
+from routes.booth import router as booth_router
+app.include_router(booth_router)
+
 
 @app.get("/health")
 async def health() -> dict[str, str]:

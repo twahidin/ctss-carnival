@@ -1,8 +1,9 @@
 import asyncpg
 import pytest
 
+pytestmark = pytest.mark.asyncio(loop_scope="session")
 
-@pytest.mark.asyncio
+
 async def test_can_connect_to_postgres(database_url: str) -> None:
     conn = await asyncpg.connect(database_url)
     try:

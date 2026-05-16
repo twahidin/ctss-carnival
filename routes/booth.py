@@ -184,3 +184,62 @@ async def undo(
             )
     _invalidate_students_cache()
     return {"undo_transaction_id": undo_id}
+
+
+@router.get("/recent")
+async def recent(
+    request: Request, session: dict = Depends(require_booth)
+) -> list[dict[str, Any]]:
+    async with request.app.state.pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT t.id AS transaction_id, t.amount, t.created_at,
+                   s.name AS student_name, s.class AS klass,
+                   EXTRACT(EPOCH FROM (NOW() - t.created_at)) AS age
+            FROM transactions t
+            JOIN students s ON s.id = t.student_id
+            WHERE t.booth_id = $1 AND t.type = 'play' AND t.reversed_by IS NULL
+            ORDER BY t.id DESC LIMIT 5
+            """,
+            session["booth_id"],
+        )
+    return [
+        {
+            "transaction_id": r["transaction_id"],
+            "amount": r["amount"],
+            "student_name": r["student_name"],
+            "class": r["klass"],
+            "age_seconds": int(r["age"]),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/stats")
+async def stats(
+    request: Request, session: dict = Depends(require_booth)
+) -> dict[str, Any]:
+    booth_id = session["booth_id"]
+    async with request.app.state.pool.acquire() as conn:
+        booth = await conn.fetchrow(
+            "SELECT tally FROM booths WHERE id = $1", booth_id
+        )
+        tx_count = await conn.fetchval(
+            "SELECT COUNT(*) FROM transactions "
+            "WHERE booth_id = $1 AND type = 'play' AND reversed_by IS NULL",
+            booth_id,
+        )
+        by_class = await conn.fetch(
+            """
+            SELECT s.class AS class, COUNT(*) AS count
+            FROM transactions t JOIN students s ON s.id = t.student_id
+            WHERE t.booth_id = $1 AND t.type = 'play' AND t.reversed_by IS NULL
+            GROUP BY s.class ORDER BY count DESC
+            """,
+            booth_id,
+        )
+    return {
+        "tally": booth["tally"] if booth else 0,
+        "tx_count": tx_count,
+        "by_class": [{"class": r["class"], "count": r["count"]} for r in by_class],
+    }

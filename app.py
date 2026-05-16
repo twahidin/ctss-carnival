@@ -41,3 +41,29 @@ app.include_router(summary_router)
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/", include_in_schema=False)
+async def root() -> RedirectResponse:
+    return RedirectResponse("/admin")
+
+
+def _make_page_handler(file: str):
+    async def serve() -> FileResponse:
+        return FileResponse(f"static/{file}")
+    return serve
+
+
+for _path, _file in (
+    ("/admin", "admin.html"),
+    ("/booth", "booth.html"),
+    ("/teacher", "teacher.html"),
+    ("/summary", "summary.html"),
+):
+    app.get(_path, include_in_schema=False)(_make_page_handler(_file))

@@ -42,7 +42,9 @@ CREATE TABLE IF NOT EXISTS settings (
 
 
 async def init_pool(database_url: str) -> asyncpg.Pool:
-    return await asyncpg.create_pool(database_url, min_size=2, max_size=10)
+    pool = await asyncpg.create_pool(database_url, min_size=2, max_size=10)
+    assert pool is not None  # asyncpg.create_pool returns None only on failure to setup
+    return pool
 
 
 async def close_pool(pool: asyncpg.Pool) -> None:

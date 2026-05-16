@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carnival · Booth</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/static/shared.js" defer></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <div id="app" class="max-w-md mx-auto p-3"></div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const app = document.getElementById('app');
+      let me = null, students = [], recent = [], stats = null, etag = null;
+      let payLock = false;
+
+      async function loadStudents() {
+        const headers = etag ? { 'If-None-Match': etag } : {};
+        const r = await fetch('/api/booth/students', { credentials: 'same-origin', headers });
+        if (r.status === 304) return;
+        etag = r.headers.get('etag');
+        students = await r.json();
+      }
+      async function loadMe()     { me = await api('GET', '/api/booth/me'); }
+      async function loadRecent() { recent = await api('GET', '/api/booth/recent'); }
+      async function loadStats()  { stats = await api('GET', '/api/booth/stats'); }
+
+      function renderHeader() {
+        return `
+          <header class="bg-blue-600 text-white rounded-lg p-4 sticky top-0 z-10 mb-3">
+            <div class="text-xl font-bold">${me.name}</div>
+            <div class="grid grid-cols-3 gap-2 mt-2 text-center text-sm">
+              <div><div class="text-2xl font-bold">${me.tally}</div><div>tokens</div></div>
+              <div><div class="text-2xl font-bold">${me.tx_count}</div><div>plays</div></div>
+              <div><div class="text-2xl font-bold">${me.cost_per_play}</div><div>per play</div></div>
+            </div>
+            <button id="logout" class="absolute top-2 right-2 text-xs underline">log out</button>
+          </header>`;
+      }
+
+      function renderSearch() {
+        return `
+          <input id="q" placeholder="Search name or class…" class="w-full border-2 rounded-lg p-3 text-lg mb-3" autocomplete="off">
+          <div id="results" class="space-y-1"></div>`;
+      }
+
+      function renderRecent() {
+        const items = recent.filter(r => r.age_seconds < 60);
+        if (!items.length) return '';
+        return `
+          <div class="mt-4 bg-white border rounded-lg p-3">
+            <div class="text-xs uppercase text-gray-500 mb-2">Recent plays</div>
+            ${items.map(r => `
+              <div class="flex justify-between items-center py-1">
+                <span>${r.student_name} <span class="text-gray-500">(${r.class})</span> · −${r.amount}</span>
+                <button class="text-red-600 text-sm underline" data-undo="${r.transaction_id}">Undo (${60 - r.age_seconds}s)</button>
+              </div>`).join('')}
+          </div>`;
+      }
+
+      function renderStats() {
+        if (!stats) return '';
+        return `
+          <details class="mt-4">
+            <summary class="cursor-pointer text-sm text-gray-600">Today's stats by class</summary>
+            <div class="mt-2 flex flex-wrap gap-2">
+              ${stats.by_class.map(c => `<span class="bg-gray-200 px-2 py-1 rounded text-sm">${c.class}: ${c.count}</span>`).join('')}
+            </div>
+          </details>`;
+      }
+
+      function render() {
+        app.innerHTML = renderHeader() + renderSearch() + `<div id="recent">${renderRecent()}</div>` + `<div id="stats">${renderStats()}</div>`;
+        document.getElementById('logout').onclick = async () => {
+          await api('POST', '/api/booth/logout'); location.reload();
+        };
+        const q = document.getElementById('q');
+        let timer;
+        q.addEventListener('input', () => {
+          clearTimeout(timer);
+          timer = setTimeout(async () => {
+            await loadStudents();
+            renderResults(q.value.trim().toLowerCase());
+          }, 200);
+        });
+        for (const btn of document.querySelectorAll('[data-undo]')) {
+          btn.onclick = async () => {
+            try {
+              await api('POST', '/api/booth/undo', { transaction_id: parseInt(btn.dataset.undo, 10) });
+              toast('Undone');
+              await Promise.all([loadMe(), loadRecent(), loadStudents()]);
+              render();
+            } catch (e) { toast(e.message, 'error'); }
+          };
+        }
+      }
+
+      function renderResults(query) {
+        const out = document.getElementById('results');
+        const q = query.toLowerCase();
+        const matches = !q ? [] : students.filter(s =>
+          s.name.toLowerCase().includes(q) || s.class.toLowerCase().includes(q)
+        ).slice(0, 30);
+        out.innerHTML = matches.map(s => `
+          <button class="w-full text-left flex justify-between items-center bg-white border rounded-lg p-3 ${s.is_absent ? 'opacity-60' : ''}" data-id="${s.id}">
+            <span>
+              <span class="font-medium">${s.name}</span>
+              <span class="text-gray-500"> · ${s.class}</span>
+              ${s.is_absent ? '<span class="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded">ABSENT</span>' : ''}
+            </span>
+            <span class="font-mono">${s.tokens}</span>
+          </button>`).join('');
+        for (const btn of out.querySelectorAll('button[data-id]')) {
+          btn.onclick = () => doPay(parseInt(btn.dataset.id, 10));
+        }
+      }
+
+      async function doPay(student_id) {
+        const s = students.find(x => x.id === student_id);
+        if (!s) return;
+        const ok = await confirmModal({
+          title: `Confirm payment`,
+          body: `<strong>${s.name}</strong> (${s.class})<br>Balance: ${s.tokens}<br>Deduct <strong>${me.cost_per_play}</strong> for <strong>${me.name}</strong>?`,
+          confirmLabel: 'PAY', confirmKind: 'green',
+        });
+        if (!ok || payLock) return;
+        payLock = true;
+        setTimeout(() => { payLock = false; }, 1000);
+        try {
+          await api('POST', '/api/booth/pay', { student_id });
+          toast('Paid');
+          await Promise.all([loadMe(), loadRecent(), loadStudents()]);
+          render();
+        } catch (e) { toast(e.message, 'error'); }
+      }
+
+      async function showLogin() {
+        app.innerHTML = `
+          <div class="mt-12">
+            <h1 class="text-xl font-bold mb-4 text-center">Booth login</h1>
+            <input id="code" inputmode="numeric" placeholder="Booth code" class="w-full border-2 rounded-lg p-3 text-center text-2xl mb-3">
+            <button id="login" class="w-full bg-blue-600 text-white py-3 rounded-lg">Log in</button>
+          </div>`;
+        document.getElementById('login').onclick = async () => {
+          try {
+            await api('POST', '/api/booth/login', { code: document.getElementById('code').value });
+            location.reload();
+          } catch (e) { toast(e.message, 'error'); }
+        };
+      }
+
+      (async () => {
+        try {
+          await Promise.all([loadMe(), loadStudents(), loadRecent(), loadStats()]);
+          render();
+          setInterval(async () => { await loadMe(); document.querySelector('header')?.replaceWith(document.createRange().createContextualFragment(renderHeader()).firstElementChild); }, 5000);
+          setInterval(async () => { await loadStats(); document.getElementById('stats').innerHTML = renderStats(); }, 30000);
+          setInterval(async () => { await loadRecent(); document.getElementById('recent').innerHTML = renderRecent(); }, 1000);
+        } catch { showLogin(); }
+      })();
+    });
+  </script>
+</body>
+</html>

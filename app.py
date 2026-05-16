@@ -22,6 +22,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CTSS Carnival Token System", lifespan=lifespan)
 
+from routes.auth_routes import router as auth_router
+app.include_router(auth_router)
+
 
 @app.get("/health")
 async def health() -> dict[str, str]:

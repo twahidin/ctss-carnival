@@ -32,3 +32,27 @@ async def clean_db(session_pool):
 
     await truncate_all(session_pool)
     yield
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def client(session_pool):
+    from httpx import ASGITransport, AsyncClient
+    from app import app
+    from auth import bootstrap_passwords
+    # Inject pool into app state so endpoints can use it without running lifespan
+    app.state.pool = session_pool
+    await bootstrap_passwords(session_pool)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limit():
+    yield
+    # cleanup: clear the rate-limit bucket between tests
+    try:
+        from routes.auth_routes import _attempts
+        _attempts.clear()
+    except ImportError:
+        pass

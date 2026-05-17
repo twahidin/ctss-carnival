@@ -14,6 +14,7 @@
       const app = document.getElementById('app');
       let me = null, students = [], recent = [], stats = null, etag = null;
       let payLock = false;
+      let modalOpen = false;
 
       async function loadStudents() {
         // Skip If-None-Match if local cache is empty — guarantees we refill it.
@@ -119,10 +120,12 @@
       }
 
       async function doPay(student_id) {
+        if (modalOpen) return;
         const s = students.find(x => x.id === student_id);
         if (!s) return;
         if (s.is_absent) return toast('Student is marked absent', 'warn');
         if (s.tokens < 1) return toast('No tokens to deduct', 'warn');
+        modalOpen = true;
 
         const defaultSel = Math.min(me.cost_per_play, s.tokens);
         const selected = new Set();
@@ -164,7 +167,8 @@
         }
         paint();
 
-        function close() { overlay.remove(); }
+        let cancelled = false;
+        function close() { cancelled = true; modalOpen = false; overlay.remove(); }
         overlay.querySelector('#tokcancel').onclick = close;
         overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 
@@ -175,11 +179,13 @@
           payBtn.disabled = true;
           try {
             await api('POST', '/api/booth/pay', { student_id, amount: selected.size });
+            if (cancelled) return;
             close();
             toast('Paid');
             await Promise.all([loadMe(), loadRecent(), loadStudents()]);
             render();
           } catch (e) {
+            if (cancelled) return;
             payBtn.disabled = false;
             toast(e.message, 'error');
           }

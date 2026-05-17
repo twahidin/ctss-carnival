@@ -16,7 +16,8 @@
       let payLock = false;
 
       async function loadStudents() {
-        const headers = etag ? { 'If-None-Match': etag } : {};
+        // Skip If-None-Match if local cache is empty — guarantees we refill it.
+        const headers = (etag && students.length) ? { 'If-None-Match': etag } : {};
         const r = await fetch('/api/booth/students', { credentials: 'same-origin', headers });
         if (r.status === 304) return;
         etag = r.headers.get('etag');
@@ -84,6 +85,7 @@
             renderResults(q.value.trim().toLowerCase());
           }, 200);
         });
+        renderResults('');   // show first 30 students immediately on page load
         for (const btn of document.querySelectorAll('[data-undo]')) {
           btn.onclick = async () => {
             try {
@@ -99,7 +101,7 @@
       function renderResults(query) {
         const out = document.getElementById('results');
         const q = query.toLowerCase();
-        const matches = !q ? [] : students.filter(s =>
+        const matches = !q ? students.slice(0, 30) : students.filter(s =>
           s.name.toLowerCase().includes(q) || s.class.toLowerCase().includes(q)
         ).slice(0, 30);
         out.innerHTML = matches.map(s => `

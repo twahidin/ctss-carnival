@@ -29,8 +29,11 @@ async def session_pool(database_url: str):
 @pytest_asyncio.fixture(autouse=True, loop_scope="session")
 async def clean_db(session_pool):
     from db import truncate_all
+    from auth import bootstrap_passwords
 
     await truncate_all(session_pool)
+    # Re-bootstrap passwords after every truncate so login tests always work
+    await bootstrap_passwords(session_pool)
     yield
 
 
@@ -38,11 +41,8 @@ async def clean_db(session_pool):
 async def client(session_pool, clean_db):
     from httpx import ASGITransport, AsyncClient
     from app import app
-    from auth import bootstrap_passwords
     # Inject pool into app state so endpoints can use it without running lifespan
     app.state.pool = session_pool
-    # Re-bootstrap passwords after clean_db has truncated the settings table
-    await bootstrap_passwords(session_pool)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="https://test") as c:
         yield c

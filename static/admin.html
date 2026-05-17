@@ -100,17 +100,24 @@
 
       function renderBoothsTab(panel) {
         panel.innerHTML = `
-          <div class="mb-4 flex gap-2">
-            <input id="bn" placeholder="Name" class="border rounded p-2 flex-1">
-            <input id="bc" placeholder="Code (4-6 digit)" class="border rounded p-2 w-32">
-            <input id="bp" type="number" min="1" value="1" class="border rounded p-2 w-20">
-            <button id="add" class="bg-blue-600 text-white px-3 rounded">Add</button>
+          <div class="mb-4 grid grid-cols-12 gap-2">
+            <input id="bn"    placeholder="Name"             class="border rounded p-2 col-span-4">
+            <input id="boc"   placeholder="Owning class"     class="border rounded p-2 col-span-3">
+            <input id="bc"    placeholder="Code (4-6 digit)" class="border rounded p-2 col-span-2">
+            <input id="bp"    type="number" min="1" value="1" class="border rounded p-2 col-span-1">
+            <button id="add"  class="bg-blue-600 text-white px-3 rounded col-span-2">Add</button>
           </div>
           <table class="w-full text-sm">
-            <thead><tr class="text-left border-b"><th>Name</th><th>Code</th><th>Cost</th><th>Tally</th><th></th></tr></thead>
+            <thead><tr class="text-left border-b">
+              <th>Name</th><th>Class</th><th>Code</th><th>Cost</th><th>Tally</th><th></th>
+            </tr></thead>
             <tbody>${state.booths.map(b => `
               <tr class="border-b" data-id="${b.id}">
-                <td>${b.name}</td><td>${b.code}</td><td>${b.cost_per_play}</td><td>${b.tally}</td>
+                <td>${b.name}</td>
+                <td>${b.owning_class || '<span class="text-gray-400">—</span>'}</td>
+                <td>${b.code}</td>
+                <td>${b.cost_per_play}</td>
+                <td>${b.tally}</td>
                 <td><button class="text-red-600" data-del="${b.id}">Delete</button></td>
               </tr>`).join('')}</tbody>
           </table>`;
@@ -118,6 +125,7 @@
           try {
             await api('POST', '/api/admin/booths', {
               name: document.getElementById('bn').value,
+              owning_class: document.getElementById('boc').value,
               code: document.getElementById('bc').value,
               cost_per_play: parseInt(document.getElementById('bp').value, 10),
             });

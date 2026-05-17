@@ -109,7 +109,7 @@ async def list_students(
     async with request.app.state.pool.acquire() as conn:
         rows = await conn.fetch(
             "SELECT id, name, class, tokens, is_absent FROM students "
-            "ORDER BY name"
+            "ORDER BY LOWER(name)"
         )
     return [dict(r) for r in rows]
 

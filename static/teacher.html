@@ -22,7 +22,7 @@
         app.innerHTML = `
           <nav class="flex gap-2 mb-3">
             ${['find','absentees'].map(t => `<button data-tab="${t}" class="flex-1 py-2 rounded ${tab===t?'bg-blue-600 text-white':'bg-gray-200'}">${t}</button>`).join('')}
-            <button id="logout" class="px-2 text-sm underline">out</button>
+            <button id="logout" class="px-4 py-2 rounded bg-gray-700 text-white">Log out</button>
           </nav>
           <div id="panel"></div>`;
         for (const b of app.querySelectorAll('[data-tab]')) b.onclick = () => { tab = b.dataset.tab; current = null; renderPanel(); };

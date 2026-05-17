@@ -62,3 +62,56 @@ async def test_pay_absent_rejected(booth_client, session_pool) -> None:
 async def test_pay_unknown_student(booth_client) -> None:
     r = await booth_client.post("/api/booth/pay", json={"student_id": 99999})
     assert r.status_code == 404
+
+
+async def test_pay_with_explicit_amount(booth_client, session_pool) -> None:
+    async with session_pool.acquire() as conn:
+        sid = await conn.fetchval("SELECT id FROM students WHERE name = 'Alice'")
+    r = await booth_client.post(
+        "/api/booth/pay", json={"student_id": sid, "amount": 5}
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["new_balance"] == 5
+    async with session_pool.acquire() as conn:
+        tokens = await conn.fetchval("SELECT tokens FROM students WHERE id = $1", sid)
+        tally = await conn.fetchval("SELECT tally FROM booths WHERE code = '1234'")
+        tx = await conn.fetchrow(
+            "SELECT type, amount FROM transactions WHERE id = $1",
+            body["transaction_id"],
+        )
+    assert tokens == 5
+    assert tally == 5
+    assert tx["amount"] == 5
+
+
+async def test_pay_amount_zero_rejected(booth_client, session_pool) -> None:
+    async with session_pool.acquire() as conn:
+        sid = await conn.fetchval("SELECT id FROM students WHERE name = 'Alice'")
+    r = await booth_client.post(
+        "/api/booth/pay", json={"student_id": sid, "amount": 0}
+    )
+    assert r.status_code == 422
+
+
+async def test_pay_amount_negative_rejected(booth_client, session_pool) -> None:
+    async with session_pool.acquire() as conn:
+        sid = await conn.fetchval("SELECT id FROM students WHERE name = 'Alice'")
+    r = await booth_client.post(
+        "/api/booth/pay", json={"student_id": sid, "amount": -1}
+    )
+    assert r.status_code == 422
+
+
+async def test_pay_amount_exceeds_balance_rejected(
+    booth_client, session_pool
+) -> None:
+    async with session_pool.acquire() as conn:
+        sid = await conn.fetchval("SELECT id FROM students WHERE name = 'Alice'")
+    r = await booth_client.post(
+        "/api/booth/pay", json={"student_id": sid, "amount": 999}
+    )
+    assert r.status_code == 409
+    body = r.json()
+    msg = body.get("error") or body.get("detail", {}).get("error") or str(body.get("detail", ""))
+    assert "insufficient" in msg.lower()

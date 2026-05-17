@@ -18,3 +18,18 @@ async def test_init_schema_is_idempotent(session_pool) -> None:
     async with session_pool.acquire() as conn:
         count = await conn.fetchval("SELECT COUNT(*) FROM students")
     assert count == 0
+
+
+async def test_booths_have_owning_class_column(session_pool) -> None:
+    async with session_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT column_name, is_nullable, column_default, data_type
+            FROM information_schema.columns
+            WHERE table_name = 'booths' AND column_name = 'owning_class'
+            """
+        )
+    assert row is not None, "booths.owning_class column missing"
+    assert row["is_nullable"] == "NO"
+    assert row["column_default"] == "''::text"
+    assert row["data_type"] == "text"

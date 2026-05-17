@@ -29,7 +29,7 @@ async def test_concurrent_pays_serialized_by_for_update(
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="https://test") as client:
             await client.post("/api/booth/login", json={"code": "1234"})
-            r = await client.post("/api/booth/pay", json={"student_id": sid})
+            r = await client.post("/api/booth/pay", json={"student_id": sid, "amount": 1})
             return r.status_code
 
     statuses = await asyncio.gather(*[one_pay() for _ in range(20)])

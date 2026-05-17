@@ -19,7 +19,7 @@ async def booth_setup(client, session_pool):
             "VALUES ('Alice', '3E1', 10) RETURNING id"
         )
     await client.post("/api/booth/login", json={"code": "1234"})
-    pr = await client.post("/api/booth/pay", json={"student_id": sid})
+    pr = await client.post("/api/booth/pay", json={"student_id": sid, "amount": 2})
     return client, sid, pr.json()["transaction_id"]
 
 

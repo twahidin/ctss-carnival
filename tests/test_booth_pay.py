@@ -24,7 +24,7 @@ async def test_pay_deducts_tokens_and_increments_tally(
 ) -> None:
     async with session_pool.acquire() as conn:
         sid = await conn.fetchval("SELECT id FROM students WHERE name = 'Alice'")
-    r = await booth_client.post("/api/booth/pay", json={"student_id": sid})
+    r = await booth_client.post("/api/booth/pay", json={"student_id": sid, "amount": 2})
     assert r.status_code == 200
     body = r.json()
     assert body["new_balance"] == 8
@@ -42,7 +42,7 @@ async def test_pay_deducts_tokens_and_increments_tally(
 async def test_pay_insufficient_tokens_rejected(booth_client, session_pool) -> None:
     async with session_pool.acquire() as conn:
         sid = await conn.fetchval("SELECT id FROM students WHERE name = 'Bob'")
-    r = await booth_client.post("/api/booth/pay", json={"student_id": sid})
+    r = await booth_client.post("/api/booth/pay", json={"student_id": sid, "amount": 2})
     assert r.status_code == 409
     body = r.json()
     msg = body.get("error") or body.get("detail", {}).get("error") or str(body.get("detail", ""))
@@ -52,7 +52,7 @@ async def test_pay_insufficient_tokens_rejected(booth_client, session_pool) -> N
 async def test_pay_absent_rejected(booth_client, session_pool) -> None:
     async with session_pool.acquire() as conn:
         sid = await conn.fetchval("SELECT id FROM students WHERE name = 'Carl'")
-    r = await booth_client.post("/api/booth/pay", json={"student_id": sid})
+    r = await booth_client.post("/api/booth/pay", json={"student_id": sid, "amount": 2})
     assert r.status_code == 409
     body = r.json()
     msg = body.get("error") or body.get("detail", {}).get("error") or str(body.get("detail", ""))
@@ -60,7 +60,7 @@ async def test_pay_absent_rejected(booth_client, session_pool) -> None:
 
 
 async def test_pay_unknown_student(booth_client) -> None:
-    r = await booth_client.post("/api/booth/pay", json={"student_id": 99999})
+    r = await booth_client.post("/api/booth/pay", json={"student_id": 99999, "amount": 2})
     assert r.status_code == 404
 
 

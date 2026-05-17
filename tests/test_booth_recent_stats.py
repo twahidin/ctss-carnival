@@ -22,7 +22,7 @@ async def test_recent_returns_last_5_plays_only(booth_client, session_pool) -> N
     async with session_pool.acquire() as conn:
         sids = [r["id"] for r in await conn.fetch("SELECT id FROM students ORDER BY id")]
     for sid in sids:
-        await booth_client.post("/api/booth/pay", json={"student_id": sid})
+        await booth_client.post("/api/booth/pay", json={"student_id": sid, "amount": 1})
     r = await booth_client.get("/api/booth/recent")
     assert r.status_code == 200
     items = r.json()
@@ -34,7 +34,7 @@ async def test_recent_returns_last_5_plays_only(booth_client, session_pool) -> N
 async def test_recent_excludes_undone(booth_client, session_pool) -> None:
     async with session_pool.acquire() as conn:
         sid = await conn.fetchval("SELECT id FROM students LIMIT 1")
-    pr = await booth_client.post("/api/booth/pay", json={"student_id": sid})
+    pr = await booth_client.post("/api/booth/pay", json={"student_id": sid, "amount": 1})
     await booth_client.post(
         "/api/booth/undo", json={"transaction_id": pr.json()["transaction_id"]}
     )
@@ -48,9 +48,9 @@ async def test_stats_returns_tally_and_class_breakdown(
     async with session_pool.acquire() as conn:
         rows = await conn.fetch("SELECT id FROM students ORDER BY id")
     for row in rows[:3]:  # 3 from 3E1
-        await booth_client.post("/api/booth/pay", json={"student_id": row["id"]})
+        await booth_client.post("/api/booth/pay", json={"student_id": row["id"], "amount": 1})
     for row in rows[3:]:  # 2 from 3N2
-        await booth_client.post("/api/booth/pay", json={"student_id": row["id"]})
+        await booth_client.post("/api/booth/pay", json={"student_id": row["id"], "amount": 1})
     r = await booth_client.get("/api/booth/stats")
     assert r.status_code == 200
     body = r.json()

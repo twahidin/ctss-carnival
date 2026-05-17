@@ -86,11 +86,13 @@
           <div id="import-panel" class="mt-6"></div>`;
 
         function paintRows(query) {
+          const tbody = document.getElementById('ptbody');
+          if (!tbody) return;
           const q = (query || '').toLowerCase();
           const matches = !q ? students : students.filter(s =>
             s.name.toLowerCase().includes(q) || s.class.toLowerCase().includes(q)
           );
-          document.getElementById('ptbody').innerHTML = matches.map(s => `
+          tbody.innerHTML = matches.map(s => `
             <tr class="border-b">
               <td class="py-1">${s.name}</td>
               <td>${s.class}</td>

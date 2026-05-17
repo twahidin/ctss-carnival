@@ -121,20 +121,69 @@
       async function doPay(student_id) {
         const s = students.find(x => x.id === student_id);
         if (!s) return;
-        const ok = await confirmModal({
-          title: `Confirm payment`,
-          body: `<strong>${s.name}</strong> (${s.class})<br>Balance: ${s.tokens}<br>Deduct <strong>${me.cost_per_play}</strong> for <strong>${me.name}</strong>?`,
-          confirmLabel: 'PAY', confirmKind: 'green',
-        });
-        if (!ok || payLock) return;
-        payLock = true;
-        setTimeout(() => { payLock = false; }, 1000);
-        try {
-          await api('POST', '/api/booth/pay', { student_id });
-          toast('Paid');
-          await Promise.all([loadMe(), loadRecent(), loadStudents()]);
-          render();
-        } catch (e) { toast(e.message, 'error'); }
+        if (s.is_absent) return toast('Student is marked absent', 'warn');
+        if (s.tokens < 1) return toast('No tokens to deduct', 'warn');
+
+        const defaultSel = Math.min(me.cost_per_play, s.tokens);
+        const selected = new Set();
+        for (let i = 0; i < defaultSel; i++) selected.add(i);
+
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-20';
+        overlay.innerHTML = `
+          <div class="bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl p-4 max-h-[90vh] flex flex-col">
+            <div class="font-bold text-lg">${s.name}</div>
+            <div class="text-sm text-gray-500 mb-1">${s.class}</div>
+            <div class="text-sm mb-3">Balance: <strong>${s.tokens}</strong> tokens — tap to deduct</div>
+            <div id="tokgrid" class="grid grid-cols-5 gap-2 overflow-y-auto py-2"></div>
+            <div class="flex items-center justify-between mt-3 pt-3 border-t">
+              <button id="tokcancel" class="px-4 py-2 rounded bg-gray-200">Cancel</button>
+              <button id="tokpay" class="px-6 py-3 rounded bg-green-600 text-white font-bold disabled:opacity-50">PAY <span id="toknum">0</span></button>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+
+        const grid = overlay.querySelector('#tokgrid');
+        const num = overlay.querySelector('#toknum');
+        const payBtn = overlay.querySelector('#tokpay');
+
+        function paint() {
+          grid.innerHTML = '';
+          for (let i = 0; i < s.tokens; i++) {
+            const b = document.createElement('button');
+            const on = selected.has(i);
+            b.className = on
+              ? 'aspect-square rounded-full bg-red-600 text-white text-xs font-bold'
+              : 'aspect-square rounded-full bg-red-200 border-2 border-red-300';
+            b.textContent = on ? '✓' : '';
+            b.onclick = () => { on ? selected.delete(i) : selected.add(i); paint(); };
+            grid.appendChild(b);
+          }
+          num.textContent = selected.size;
+          payBtn.disabled = selected.size === 0;
+        }
+        paint();
+
+        function close() { overlay.remove(); }
+        overlay.querySelector('#tokcancel').onclick = close;
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+        payBtn.onclick = async () => {
+          if (payLock || selected.size === 0) return;
+          payLock = true;
+          setTimeout(() => { payLock = false; }, 1000);
+          payBtn.disabled = true;
+          try {
+            await api('POST', '/api/booth/pay', { student_id, amount: selected.size });
+            close();
+            toast('Paid');
+            await Promise.all([loadMe(), loadRecent(), loadStudents()]);
+            render();
+          } catch (e) {
+            payBtn.disabled = false;
+            toast(e.message, 'error');
+          }
+        };
       }
 
       async function showLogin() {

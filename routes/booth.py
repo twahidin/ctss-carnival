@@ -4,7 +4,7 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from auth import require_role
 
@@ -71,6 +71,7 @@ async def list_students(
 
 class PayBody(BaseModel):
     student_id: int
+    amount: int = Field(ge=1, le=1000)
 
 
 def _api_error(detail: str, code: str, status_code: int) -> HTTPException:
@@ -83,14 +84,14 @@ async def pay(
 ) -> dict[str, Any]:
     booth_id = session["booth_id"]
     pool = request.app.state.pool
+    cost = body.amount
     async with pool.acquire() as conn:
         async with conn.transaction():
             booth = await conn.fetchrow(
-                "SELECT cost_per_play FROM booths WHERE id = $1", booth_id
+                "SELECT id FROM booths WHERE id = $1", booth_id
             )
             if not booth:
                 raise _api_error("Booth not found", "BOOTH_NOT_FOUND", 404)
-            cost = booth["cost_per_play"]
             student = await conn.fetchrow(
                 "SELECT id, name, tokens, is_absent FROM students "
                 "WHERE id = $1 FOR UPDATE",

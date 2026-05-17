@@ -21,7 +21,7 @@
             <button id="export" class="text-sm bg-gray-200 px-3 py-1 rounded">Export CSV</button>
           </header>
           <nav class="flex gap-2 mb-4">
-            ${['settings','roster','booths','resets'].map(t =>
+            ${['settings','participants','booths','resets'].map(t =>
               `<button data-tab="${t}" class="px-3 py-1 rounded ${state.tab===t?'bg-blue-600 text-white':'bg-gray-200'}">${t}</button>`
             ).join('')}
           </nav>
@@ -56,8 +56,8 @@
               render();
             } catch (e) { toast(e.message, 'error'); }
           };
-        } else if (state.tab === 'roster') {
-          renderRosterTab(panel);
+        } else if (state.tab === 'participants') {
+          renderParticipantsTab(panel);
         } else if (state.tab === 'booths') {
           renderBoothsTab(panel);
         } else if (state.tab === 'resets') {
@@ -65,7 +65,7 @@
         }
       }
 
-      function renderRosterTab(panel) {
+      function renderParticipantsTab(panel) {
         panel.innerHTML = `
           <input type="file" id="csv" accept=".csv" class="block mb-3">
           <button id="preview" class="bg-blue-600 text-white px-4 py-2 rounded">Preview</button>

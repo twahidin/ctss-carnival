@@ -27,7 +27,19 @@
         app.innerHTML = `
           <h1 class="text-2xl font-bold mb-1">Summary</h1>
           <p class="text-xs text-gray-500 mb-4">Updated ${lastFetch.toLocaleTimeString()}</p>
-          <h2 class="font-semibold mb-1">By class</h2>
+          <h2 class="font-semibold mb-1">By Owning Class — Earnings</h2>
+          <table class="w-full text-sm mb-4 bg-white border rounded">
+            <thead><tr class="text-left border-b">
+              <th class="p-2">Class</th><th class="p-2">Earned</th><th class="p-2">Booths run</th>
+            </tr></thead>
+            <tbody>${(s.by_owning_class || []).map(row => `
+              <tr class="border-b">
+                <td class="p-2">${row.class}</td>
+                <td class="p-2 font-mono">${row.earned}</td>
+                <td class="p-2 text-gray-600">${row.booths.join(', ')}</td>
+              </tr>`).join('')}</tbody>
+          </table>
+          <h2 class="font-semibold mb-1">By Student Class — Spending</h2>
           <table class="w-full text-sm mb-4 bg-white border rounded">
             <thead><tr class="text-left border-b"><th class="p-2">Class</th><th class="p-2">Students</th><th class="p-2">Spent</th><th class="p-2">Remaining</th></tr></thead>
             <tbody>${s.by_class.map(r => `<tr class="border-b"><td class="p-2">${r.class}</td><td class="p-2">${r.total_students}</td><td class="p-2">${r.total_spent}</td><td class="p-2">${r.total_remaining}</td></tr>`).join('')}</tbody>

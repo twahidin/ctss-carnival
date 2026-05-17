@@ -86,7 +86,7 @@
             renderResults(q.value.trim().toLowerCase());
           }, 200);
         });
-        renderResults('');   // show first 30 students immediately on page load
+        renderResults('');
         for (const btn of document.querySelectorAll('[data-undo]')) {
           btn.onclick = async () => {
             try {
@@ -102,17 +102,15 @@
       function renderResults(query) {
         const out = document.getElementById('results');
         const q = query.toLowerCase();
-        const matches = !q ? students.slice(0, 30) : students.filter(s =>
+        if (!q) { out.innerHTML = ''; return; }
+        const matches = students.filter(s =>
           s.name.toLowerCase().includes(q) || s.class.toLowerCase().includes(q)
         ).slice(0, 30);
         out.innerHTML = matches.map(s => `
-          <button class="w-full text-left flex justify-between items-center bg-white border rounded-lg p-3 ${s.is_absent ? 'opacity-60' : ''}" data-id="${s.id}">
-            <span>
-              <span class="font-medium">${s.name}</span>
-              <span class="text-gray-500"> · ${s.class}</span>
-              ${s.is_absent ? '<span class="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded">ABSENT</span>' : ''}
-            </span>
-            <span class="font-mono">${s.tokens}</span>
+          <button class="w-full text-left bg-white border rounded-lg p-3 ${s.is_absent ? 'opacity-60' : ''}" data-id="${s.id}">
+            <span class="font-medium">${s.name}</span>
+            <span class="text-gray-500"> · ${s.class}</span>
+            ${s.is_absent ? '<span class="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded">ABSENT</span>' : ''}
           </button>`).join('');
         for (const btn of out.querySelectorAll('button[data-id]')) {
           btn.onclick = () => doPay(parseInt(btn.dataset.id, 10));

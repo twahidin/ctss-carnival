@@ -73,12 +73,14 @@ class BoothCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     code: str
     cost_per_play: int = Field(ge=1, le=1000)
+    owning_class: str = Field(min_length=1, max_length=50)
 
 
 class BoothUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
     code: str | None = None
     cost_per_play: int | None = Field(default=None, ge=1, le=1000)
+    owning_class: str | None = Field(default=None, min_length=1, max_length=50)
 
 
 def _validate_code(code: str) -> None:
@@ -94,7 +96,8 @@ async def list_booths(
 ) -> list[dict[str, Any]]:
     async with request.app.state.pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT id, name, code, cost_per_play, tally FROM booths ORDER BY id"
+            "SELECT id, name, code, cost_per_play, tally, owning_class "
+            "FROM booths ORDER BY id"
         )
     return [dict(r) for r in rows]
 
@@ -108,11 +111,11 @@ async def create_booth(
         try:
             row = await conn.fetchrow(
                 """
-                INSERT INTO booths (name, code, cost_per_play)
-                VALUES ($1, $2, $3)
-                RETURNING id, name, code, cost_per_play, tally
+                INSERT INTO booths (name, code, cost_per_play, owning_class)
+                VALUES ($1, $2, $3, $4)
+                RETURNING id, name, code, cost_per_play, tally, owning_class
                 """,
-                body.name, body.code, body.cost_per_play,
+                body.name, body.code, body.cost_per_play, body.owning_class,
             )
         except Exception as e:
             if "unique" in str(e).lower():
@@ -133,7 +136,7 @@ async def update_booth(
         _validate_code(body.code)
     fields: list[str] = []
     values: list[Any] = []
-    for col in ("name", "code", "cost_per_play"):
+    for col in ("name", "code", "cost_per_play", "owning_class"):
         v = getattr(body, col)
         if v is not None:
             fields.append(f"{col} = ${len(values) + 1}")
@@ -146,7 +149,7 @@ async def update_booth(
             row = await conn.fetchrow(
                 f"UPDATE booths SET {', '.join(fields)} "
                 f"WHERE id = ${len(values)} "
-                "RETURNING id, name, code, cost_per_play, tally",
+                "RETURNING id, name, code, cost_per_play, tally, owning_class",
                 *values,
             )
         except Exception as e:

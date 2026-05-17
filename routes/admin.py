@@ -102,6 +102,18 @@ async def list_booths(
     return [dict(r) for r in rows]
 
 
+@router.get("/students")
+async def list_students(
+    request: Request, _: dict = Depends(require_admin)
+) -> list[dict[str, Any]]:
+    async with request.app.state.pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, name, class, tokens, is_absent FROM students "
+            "ORDER BY name"
+        )
+    return [dict(r) for r in rows]
+
+
 @router.post("/booths")
 async def create_booth(
     body: BoothCreate, request: Request, _: dict = Depends(require_admin)

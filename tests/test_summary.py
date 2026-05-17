@@ -46,3 +46,36 @@ async def test_top_spenders(admin_with_data) -> None:
     assert len(body) <= 10
     assert "name" in body[0]
     assert "spent" in body[0]
+
+
+async def test_summary_by_owning_class_groups_booths(client, session_pool) -> None:
+    async with session_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO booths (name, code, cost_per_play, tally, owning_class) VALUES "
+            "('Haunted', '1111', 2, 30, '3I4'), "
+            "('Lucky',   '2222', 1, 12, '3I4'), "
+            "('Ring',    '3333', 1, 47, '3E1')"
+        )
+    await client.post("/api/admin/login", json={"password": "test-admin-pw"})
+    r = await client.get("/api/summary")
+    assert r.status_code == 200
+    by_owning = {row["class"]: row for row in r.json()["by_owning_class"]}
+    assert by_owning["3I4"]["earned"] == 42
+    assert sorted(by_owning["3I4"]["booths"]) == ["Haunted", "Lucky"]
+    assert by_owning["3E1"]["earned"] == 47
+    assert by_owning["3E1"]["booths"] == ["Ring"]
+    earned_seq = [row["earned"] for row in r.json()["by_owning_class"]]
+    assert earned_seq == sorted(earned_seq, reverse=True)
+
+
+async def test_summary_unassigned_booths_grouped(client, session_pool) -> None:
+    async with session_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO booths (name, code, cost_per_play, tally, owning_class) "
+            "VALUES ('Old', '1111', 1, 5, '')"
+        )
+    await client.post("/api/admin/login", json={"password": "test-admin-pw"})
+    r = await client.get("/api/summary")
+    by_owning = {row["class"]: row for row in r.json()["by_owning_class"]}
+    assert by_owning["(unassigned)"]["earned"] == 5
+    assert by_owning["(unassigned)"]["booths"] == ["Old"]

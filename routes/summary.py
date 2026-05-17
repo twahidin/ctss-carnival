@@ -47,9 +47,24 @@ async def summary(
             ORDER BY b.id
             """
         )
+        by_owning_class = await conn.fetch(
+            """
+            SELECT
+                COALESCE(NULLIF(owning_class, ''), '(unassigned)') AS class,
+                COALESCE(SUM(tally), 0)::int                       AS earned,
+                ARRAY_AGG(name ORDER BY name)                      AS booths
+            FROM booths
+            GROUP BY COALESCE(NULLIF(owning_class, ''), '(unassigned)')
+            ORDER BY earned DESC, class
+            """
+        )
     return {
-        "by_class": [dict(r) for r in by_class],
-        "by_booth": [dict(r) for r in by_booth],
+        "by_class":         [dict(r) for r in by_class],
+        "by_booth":         [dict(r) for r in by_booth],
+        "by_owning_class":  [
+            {"class": r["class"], "earned": r["earned"], "booths": list(r["booths"])}
+            for r in by_owning_class
+        ],
     }
 
 

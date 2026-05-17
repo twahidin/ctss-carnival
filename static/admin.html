@@ -12,7 +12,7 @@
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const app = document.getElementById('app');
-      let state = { tab: 'settings', settings: null, booths: [] };
+      let state = { tab: 'settings', settings: null, booths: [], students: [] };
 
       function render() {
         app.innerHTML = `
@@ -66,10 +66,59 @@
       }
 
       function renderParticipantsTab(panel) {
+        const students = state.students || [];
+        if (students.length === 0) {
+          renderImportCsv(panel);
+          return;
+        }
         panel.innerHTML = `
-          <input type="file" id="csv" accept=".csv" class="block mb-3">
-          <button id="preview" class="bg-blue-600 text-white px-4 py-2 rounded">Preview</button>
-          <div id="preview-out" class="mt-4"></div>`;
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-sm text-gray-600"><strong>${students.length}</strong> students</div>
+            <button id="show-import" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">Import CSV</button>
+          </div>
+          <input id="pq" placeholder="Search name or class…" class="w-full border rounded p-2 mb-3" autocomplete="off">
+          <table class="w-full text-sm">
+            <thead><tr class="text-left border-b">
+              <th class="py-2">Name</th><th>Class</th><th>Tokens</th><th>Absent</th>
+            </tr></thead>
+            <tbody id="ptbody"></tbody>
+          </table>
+          <div id="import-panel" class="mt-6"></div>`;
+
+        function paintRows(query) {
+          const q = (query || '').toLowerCase();
+          const matches = !q ? students : students.filter(s =>
+            s.name.toLowerCase().includes(q) || s.class.toLowerCase().includes(q)
+          );
+          document.getElementById('ptbody').innerHTML = matches.map(s => `
+            <tr class="border-b">
+              <td class="py-1">${s.name}</td>
+              <td>${s.class}</td>
+              <td>${s.tokens}</td>
+              <td>${s.is_absent ? '<span class="text-red-600">●</span>' : '<span class="text-gray-400">○</span>'}</td>
+            </tr>`).join('');
+        }
+        paintRows('');
+
+        let timer;
+        document.getElementById('pq').addEventListener('input', e => {
+          clearTimeout(timer);
+          timer = setTimeout(() => paintRows(e.target.value.trim()), 150);
+        });
+
+        document.getElementById('show-import').onclick = () => {
+          renderImportCsv(document.getElementById('import-panel'));
+        };
+      }
+
+      function renderImportCsv(panel) {
+        panel.innerHTML = `
+          <div class="border rounded p-3 bg-amber-50">
+            <p class="text-sm mb-2 text-amber-800">Uploading a new CSV replaces ALL existing students.</p>
+            <input type="file" id="csv" accept=".csv" class="block mb-3">
+            <button id="preview" class="bg-blue-600 text-white px-4 py-2 rounded">Preview</button>
+            <div id="preview-out" class="mt-4"></div>
+          </div>`;
         document.getElementById('preview').onclick = async () => {
           const f = document.getElementById('csv').files[0];
           if (!f) return toast('Pick a file', 'warn');
@@ -91,7 +140,8 @@
               try {
                 const c = await api('POST', '/api/admin/upload-csv/confirm', { token: res.token });
                 toast(`Imported ${c.inserted} students`);
-                out.innerHTML = '';
+                await loadStudents();
+                renderPanel();
               } catch (e) { toast(e.message, 'error'); }
             };
           } catch (e) { toast(e.message, 'error'); }
@@ -171,7 +221,8 @@
 
       async function loadSettings() { state.settings = await api('GET', '/api/admin/settings'); }
       async function loadBooths()   { state.booths   = await api('GET', '/api/admin/booths'); }
-      async function loadAll() { await Promise.all([loadSettings(), loadBooths()]); }
+      async function loadStudents() { state.students = await api('GET', '/api/admin/students'); }
+      async function loadAll() { await Promise.all([loadSettings(), loadBooths(), loadStudents()]); }
 
       async function showLogin() {
         app.innerHTML = `

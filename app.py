@@ -43,15 +43,15 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/", include_in_schema=False)
-async def root() -> RedirectResponse:
-    return RedirectResponse("/admin")
+async def root() -> FileResponse:
+    return FileResponse("static/index.html")
 
 
 def _make_page_handler(file: str):

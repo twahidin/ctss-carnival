@@ -7,24 +7,24 @@ Pair it with the matching slide (slide 0 = how-to, slide N = your codes) from `b
 
 ## For the Sec 2 form teachers' group
 
-Hi Sec 2 form teachers 👋 Action needed before the carnival starts.
+Hi Sec 2 form teachers 👋 Quick brief on what to do for the carnival.
 
-**Timeline:**
-• 9:00 AM — system resets, all students start with fresh tokens
-• **9:30 AM — you mark absentees for your form class**
-• 9:55 AM — booth operators log in and the carnival begins
+**Timeline**
+• 9:00 — system resets, all students get fresh tokens
+• **9:30 — you mark absentees for your form class**
+• 9:55 — booth operators log in
+• 10:00 — carnival begins
 
-By **9:30 sharp**, please:
-1. Open https://carnival.up.railway.app/teacher on your phone or laptop
-2. Log in with the teacher password
-3. Tap the **Absentees** tab
-4. Expand your form class, tick the absent students
-5. Tap **Mark ticked ABSENT**
+**Your tools** (https://carnival.up.railway.app/teacher, teacher password)
+1. **Find tab** — look up any student, see balance + history
+2. **Refund / Deduct** — adjustment buttons inside a student's page. Use these as your discipline tool (e.g. deduct a token for misbehaviour, refund if a booth over-charged). Each action needs a short note (min 3 chars) and is logged in their history.
+3. **Absentees tab** — by 9:30, expand your form class, tick absentees, tap *Mark ticked ABSENT*. Absent students' tokens get locked so nobody else can spend them.
 
-If you don't mark absent students, their tokens are still live in the system and someone else could spend them at a booth — so please don't skip this.
+**Brief your form class before they leave the room:**
+> "When you go to a booth, the operator will tap your name and select the red tokens for the price. *You* tap the green **PAY** button, not them. This stops booth operators from charging you more than agreed. If you ever get over-charged, find any teacher and ask for a refund."
 
-Reference slide (one page, you can project this): https://carnival.up.railway.app/sec2-teacher
-PDF copy attached.
+Reference slides (2 pages, project these on the screen): https://carnival.up.railway.app/sec2-teacher
+PDF attached for sharing.
 
 Any issues, ping me. Thanks!
 

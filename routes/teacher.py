@@ -154,6 +154,79 @@ async def absent_bulk(
     return {"affected": affected}
 
 
+@router.get("/booths")
+async def teacher_booths(
+    request: Request, _: dict = Depends(require_teacher)
+) -> list[dict[str, Any]]:
+    async with request.app.state.pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT b.id, b.name, b.cost_per_play, b.owning_class, b.tally,
+                   COALESCE(p.plays, 0)::int AS plays,
+                   COALESCE(p.avg_amount, 0)::float AS avg_amount
+            FROM booths b
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*) AS plays, AVG(amount) AS avg_amount
+                FROM transactions t
+                WHERE t.booth_id = b.id AND t.type = 'play' AND t.reversed_by IS NULL
+            ) p ON TRUE
+            ORDER BY b.name
+            """
+        )
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "cost_per_play": r["cost_per_play"],
+            "owning_class": r["owning_class"],
+            "tally": r["tally"],
+            "plays": r["plays"],
+            "avg_amount": round(float(r["avg_amount"]), 2),
+            "suspicious": r["plays"] > 0 and r["avg_amount"] > r["cost_per_play"] * 1.5,
+        }
+        for r in rows
+    ]
+
+
+@router.get("/booth/{booth_id}")
+async def teacher_booth_detail(
+    booth_id: int, request: Request, _: dict = Depends(require_teacher)
+) -> dict[str, Any]:
+    async with request.app.state.pool.acquire() as conn:
+        b = await conn.fetchrow(
+            "SELECT id, name, cost_per_play, owning_class, tally FROM booths WHERE id = $1",
+            booth_id,
+        )
+        if not b:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Booth not found")
+        history = await conn.fetch(
+            """
+            SELECT t.id, t.amount, t.type, t.created_at, t.reversed_by,
+                   s.name AS student_name, s.class AS student_class
+            FROM transactions t
+            LEFT JOIN students s ON s.id = t.student_id
+            WHERE t.booth_id = $1
+            ORDER BY t.id DESC LIMIT 100
+            """,
+            booth_id,
+        )
+    return {
+        **dict(b),
+        "history": [
+            {
+                "id": h["id"],
+                "amount": h["amount"],
+                "type": h["type"],
+                "reversed": h["reversed_by"] is not None,
+                "student_name": h["student_name"],
+                "student_class": h["student_class"],
+                "created_at": h["created_at"].isoformat(),
+            }
+            for h in history
+        ],
+    }
+
+
 @router.get("/students-by-class")
 async def students_by_class(
     request: Request, _: dict = Depends(require_teacher)

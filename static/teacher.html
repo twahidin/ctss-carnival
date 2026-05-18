@@ -12,20 +12,22 @@
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const app = document.getElementById('app');
-      let tab = 'find', students = [], byClass = [], current = null;
+      let tab = 'find', students = [], byClass = [], booths = [], current = null, currentBooth = null;
 
       async function loadStudents() { students = await api('GET', '/api/teacher/students'); }
       async function loadByClass()  { byClass  = await api('GET', '/api/teacher/students-by-class'); }
+      async function loadBooths()   { booths   = await api('GET', '/api/teacher/booths'); }
       async function loadDetail(id) { current = await api('GET', `/api/teacher/student/${id}`); }
+      async function loadBoothDetail(id) { currentBooth = await api('GET', `/api/teacher/booth/${id}`); }
 
       function render() {
         app.innerHTML = `
           <nav class="flex gap-2 mb-3">
-            ${['find','absentees'].map(t => `<button data-tab="${t}" class="flex-1 py-2 rounded ${tab===t?'bg-blue-600 text-white':'bg-gray-200'}">${t}</button>`).join('')}
+            ${['find','absentees','booths'].map(t => `<button data-tab="${t}" class="flex-1 py-2 rounded ${tab===t?'bg-blue-600 text-white':'bg-gray-200'}">${t}</button>`).join('')}
             <button id="logout" class="px-4 py-2 rounded bg-gray-700 text-white">Log out</button>
           </nav>
           <div id="panel"></div>`;
-        for (const b of app.querySelectorAll('[data-tab]')) b.onclick = () => { tab = b.dataset.tab; current = null; renderPanel(); };
+        for (const b of app.querySelectorAll('[data-tab]')) b.onclick = () => { tab = b.dataset.tab; current = null; currentBooth = null; renderPanel(); };
         document.getElementById('logout').onclick = async () => { await api('POST', '/api/teacher/logout'); location.reload(); };
         renderPanel();
       }
@@ -33,7 +35,8 @@
       function renderPanel() {
         const panel = document.getElementById('panel');
         if (tab === 'find') renderFind(panel);
-        else renderAbsentees(panel);
+        else if (tab === 'absentees') renderAbsentees(panel);
+        else renderBooths(panel);
       }
 
       function renderFind(panel) {
@@ -118,6 +121,62 @@
         document.getElementById('mpres').onclick = () => submit(false);
       }
 
+      function renderBooths(panel) {
+        if (currentBooth) return renderBoothDetail(panel);
+        panel.innerHTML = `
+          <p class="text-xs text-gray-500 mb-2">Tap a booth to see every play. Suspicious = average charge > 1.5× declared cost.</p>
+          <div class="space-y-1">
+            ${booths.map(b => `
+              <button data-bid="${b.id}" class="w-full text-left bg-white border rounded p-3 ${b.suspicious ? 'border-red-400 bg-red-50' : ''}">
+                <div class="flex justify-between items-baseline">
+                  <div>
+                    <span class="font-semibold">${b.name}</span>
+                    <span class="text-gray-500 text-sm"> · ${b.owning_class || '—'}</span>
+                    ${b.suspicious ? '<span class="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded">CHECK</span>' : ''}
+                  </div>
+                  <span class="font-mono text-sm">${b.tally} tok</span>
+                </div>
+                <div class="text-xs text-gray-600 mt-1">
+                  ${b.plays} plays · avg ${b.avg_amount}/play · declared ${b.cost_per_play}
+                </div>
+              </button>`).join('')}
+          </div>`;
+        for (const btn of panel.querySelectorAll('[data-bid]')) {
+          btn.onclick = async () => {
+            try {
+              await loadBoothDetail(parseInt(btn.dataset.bid, 10));
+              renderPanel();
+            } catch (e) { toast(e.message, 'error'); }
+          };
+        }
+      }
+
+      function renderBoothDetail(panel) {
+        const b = currentBooth;
+        const flag = (h) => {
+          if (h.type !== 'play' || h.reversed) return '';
+          if (h.amount > b.cost_per_play * 1.5) return '<span class="ml-2 text-xs bg-red-600 text-white px-1.5 rounded">HIGH</span>';
+          return '';
+        };
+        panel.innerHTML = `
+          <button id="bback" class="text-sm underline mb-2">← back</button>
+          <h2 class="text-lg font-bold">${b.name} <span class="text-gray-500 text-base">· ${b.owning_class || '—'}</span></h2>
+          <p class="text-sm">Declared cost: <strong>${b.cost_per_play}</strong> · Tally: <strong>${b.tally}</strong></p>
+          <h3 class="mt-4 font-semibold">History (latest 100)</h3>
+          ${b.history.length ? '' : '<p class="text-sm text-gray-500">No transactions yet.</p>'}
+          <ul class="text-sm space-y-1">
+            ${b.history.map(h => `
+              <li class="${h.reversed ? 'line-through text-gray-400' : ''}">
+                ${h.created_at.slice(11,16)} ·
+                <span class="font-mono">${h.type === 'undo' ? '+' : '−'}${h.amount}</span> ·
+                ${h.student_name || '<span class="text-gray-400">(unknown)</span>'}
+                ${h.student_class ? `<span class="text-gray-500">· ${h.student_class}</span>` : ''}
+                ${flag(h)}
+              </li>`).join('')}
+          </ul>`;
+        document.getElementById('bback').onclick = () => { currentBooth = null; renderPanel(); };
+      }
+
       async function showLogin() {
         app.innerHTML = `
           <div class="mt-12">
@@ -134,7 +193,7 @@
       }
 
       (async () => {
-        try { await Promise.all([loadStudents(), loadByClass()]); render(); }
+        try { await Promise.all([loadStudents(), loadByClass(), loadBooths()]); render(); }
         catch { showLogin(); }
       })();
     });

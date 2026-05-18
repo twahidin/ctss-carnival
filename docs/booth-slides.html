@@ -6,17 +6,53 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   @page { size: 1920px 1080px; margin: 0; }
-  @media print {
-    .slide { page-break-after: always; box-shadow: none !important; border-radius: 0 !important; }
-    body { background: white; padding: 0; gap: 0; }
+  .slide-wrap {
+    width: min(100vw, 1920px);
+    aspect-ratio: 1920 / 1080;
+    overflow: hidden;
+    position: relative;
+    border-radius: 1rem;
+    box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.1);
+    background: white;
   }
-  .slide { width: 1920px; height: 1080px; }
+  .slide { width: 1920px; height: 1080px; transform-origin: top left; }
+  @media print {
+    html, body {
+      background: white !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      gap: 0 !important;
+      display: block !important;
+    }
+    body > * + * { margin-top: 0 !important; }
+    .slide-wrap { display: contents !important; }
+    .slide {
+      width: 1920px !important;
+      height: 1080px !important;
+      transform: none !important;
+      page-break-after: always !important;
+      page-break-inside: avoid !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      margin: 0 !important;
+      overflow: hidden !important;
+    }
+    .slide:last-of-type { page-break-after: auto !important; }
+  }
 </style>
 </head>
 <body class="bg-gray-100 p-6 space-y-8 flex flex-col items-center">
+<script>
+function fit() {
+  const scale = Math.min(1, window.innerWidth / 1920);
+  for (const s of document.querySelectorAll('.slide')) s.style.transform = `scale(${scale})`;
+}
+window.addEventListener('resize', fit);
+window.addEventListener('load', fit);
+</script>
 
 <!-- SLIDE 0: How to access (universal) -->
-<div class="slide bg-white rounded-2xl shadow-lg p-16 flex">
+<div class="slide-wrap"><div class="slide bg-white p-16 flex">
   <div class="flex-1 flex flex-col pr-12">
     <div class="text-base uppercase tracking-widest text-blue-600 font-bold">CTSS Carnival</div>
     <h1 class="text-7xl font-extrabold mt-2 mb-10">How to log in to a booth</h1>
@@ -39,10 +75,10 @@
     <div class="font-mono text-3xl font-bold text-center break-all">carnival.up.railway.app/booth</div>
     <div class="text-xl text-gray-500 mt-8 text-center">Bookmark on the tablet home screen for fast access.</div>
   </div>
-</div>
+</div></div>
 
 <!-- SLIDE 1: What you'll see -->
-<div class="slide bg-white rounded-2xl shadow-lg p-16 flex flex-col">
+<div class="slide-wrap"><div class="slide bg-white p-16 flex flex-col">
   <div class="text-base uppercase tracking-widest text-blue-600 font-bold">CTSS Carnival</div>
   <h1 class="text-7xl font-extrabold mt-2 mb-10">What you'll see</h1>
 
@@ -62,7 +98,7 @@
       </div>
     </div>
   </div>
-</div>
+</div></div>
 
 <!-- Per-class code slides generated below -->
 <script>
@@ -78,8 +114,10 @@ const CLASSES = [
 
 const body = document.body;
 for (const { cls, booths } of CLASSES) {
+  const wrap = document.createElement('div');
+  wrap.className = 'slide-wrap';
   const div = document.createElement('div');
-  div.className = 'slide bg-white rounded-2xl shadow-lg p-16 flex flex-col';
+  div.className = 'slide bg-white p-16 flex flex-col';
   div.innerHTML = `
     <div class="text-base uppercase tracking-widest text-blue-600 font-bold">Class ${cls}</div>
     <h1 class="text-7xl font-extrabold mt-2 mb-2">Your booth codes</h1>
@@ -102,8 +140,10 @@ for (const { cls, booths } of CLASSES) {
     <div class="mt-8 text-xl text-gray-500 border-t pt-4">
       Cost is a suggestion — booth staff can adjust per play by tapping more or fewer red tokens.
     </div>`;
-  body.appendChild(div);
+  wrap.appendChild(div);
+  body.appendChild(wrap);
 }
+fit();
 </script>
 </body>
 </html>

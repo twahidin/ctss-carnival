@@ -5,7 +5,32 @@ Pair it with the matching slide (slide 0 = how-to, slide N = your codes) from `b
 
 ---
 
-## For the teachers' group (send this first, with the PDF attached)
+## For the Sec 2 form teachers' group
+
+Hi Sec 2 form teachers 👋 Action needed before the carnival starts.
+
+**Timeline:**
+• 9:00 AM — system resets, all students start with fresh tokens
+• **9:30 AM — you mark absentees for your form class**
+• 9:55 AM — booth operators log in and the carnival begins
+
+By **9:30 sharp**, please:
+1. Open https://carnival.up.railway.app/teacher on your phone or laptop
+2. Log in with the teacher password
+3. Tap the **Absentees** tab
+4. Expand your form class, tick the absent students
+5. Tap **Mark ticked ABSENT**
+
+If you don't mark absent students, their tokens are still live in the system and someone else could spend them at a booth — so please don't skip this.
+
+Reference slide (one page, you can project this): https://carnival.up.railway.app/sec2-teacher
+PDF copy attached.
+
+Any issues, ping me. Thanks!
+
+---
+
+## For the Sec 3 form teachers' group (send this first, with the PDF attached)
 
 Hi all 👋 Quick carnival booth dry-run with your form class today — about 15 mins.
 

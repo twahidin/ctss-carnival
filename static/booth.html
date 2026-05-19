@@ -26,7 +26,7 @@
         if (intervalIds.length) return;
         intervalIds.push(setInterval(async () => { await loadMe(); document.querySelector('header')?.replaceWith(document.createRange().createContextualFragment(renderHeader()).firstElementChild); }, 5000));
         intervalIds.push(setInterval(async () => { await loadStats(); document.getElementById('stats').innerHTML = renderStats(); }, 30000));
-        intervalIds.push(setInterval(async () => { await loadRecent(); document.getElementById('recent').innerHTML = renderRecent(); }, 1000));
+        intervalIds.push(setInterval(async () => { await loadRecent(); document.getElementById('recent').innerHTML = renderRecent(); bindUndoButtons(); }, 1000));
       }
 
       async function bootApp() {
@@ -109,6 +109,10 @@
           }, 200);
         });
         renderResults('');
+        bindUndoButtons();
+      }
+
+      function bindUndoButtons() {
         for (const btn of document.querySelectorAll('[data-undo]')) {
           btn.onclick = async () => {
             try {

@@ -30,9 +30,12 @@
       }
 
       async function bootApp() {
-        await Promise.all([loadMe(), loadStudents(), loadRecent(), loadStats()]);
+        await loadMe();
         render();
         startIntervals();
+        loadStudents().catch(e => toast(e.message, 'error'));
+        loadRecent().catch(() => {});
+        loadStats().catch(() => {});
       }
 
       async function loadStudents() {
@@ -93,11 +96,11 @@
 
       function render() {
         app.innerHTML = renderHeader() + renderSearch() + `<div id="recent">${renderRecent()}</div>` + `<div id="stats">${renderStats()}</div>`;
-        document.getElementById('logout').onclick = async () => {
+        document.getElementById('logout').onclick = () => {
           stopIntervals();
-          try { await api('POST', '/api/booth/logout'); } catch (_) {}
           me = null; students = []; recent = []; stats = null; etag = null;
           showLogin();
+          api('POST', '/api/booth/logout').catch(() => {});
         };
         const q = document.getElementById('q');
         let timer;

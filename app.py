@@ -49,14 +49,17 @@ from fastapi.staticfiles import StaticFiles
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+NO_CACHE_HEADERS = {"Cache-Control": "no-cache, must-revalidate"}
+
+
 @app.get("/", include_in_schema=False)
 async def root() -> FileResponse:
-    return FileResponse("static/index.html")
+    return FileResponse("static/index.html", headers=NO_CACHE_HEADERS)
 
 
 def _make_page_handler(file: str):
     async def serve() -> FileResponse:
-        return FileResponse(f"static/{file}")
+        return FileResponse(f"static/{file}", headers=NO_CACHE_HEADERS)
     return serve
 
 

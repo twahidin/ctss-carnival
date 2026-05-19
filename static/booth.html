@@ -15,6 +15,25 @@
       let me = null, students = [], recent = [], stats = null, etag = null;
       let payLock = false;
       let modalOpen = false;
+      let intervalIds = [];
+
+      function stopIntervals() {
+        intervalIds.forEach(clearInterval);
+        intervalIds = [];
+      }
+
+      function startIntervals() {
+        if (intervalIds.length) return;
+        intervalIds.push(setInterval(async () => { await loadMe(); document.querySelector('header')?.replaceWith(document.createRange().createContextualFragment(renderHeader()).firstElementChild); }, 5000));
+        intervalIds.push(setInterval(async () => { await loadStats(); document.getElementById('stats').innerHTML = renderStats(); }, 30000));
+        intervalIds.push(setInterval(async () => { await loadRecent(); document.getElementById('recent').innerHTML = renderRecent(); }, 1000));
+      }
+
+      async function bootApp() {
+        await Promise.all([loadMe(), loadStudents(), loadRecent(), loadStats()]);
+        render();
+        startIntervals();
+      }
 
       async function loadStudents() {
         // Skip If-None-Match if local cache is empty — guarantees we refill it.
@@ -75,7 +94,10 @@
       function render() {
         app.innerHTML = renderHeader() + renderSearch() + `<div id="recent">${renderRecent()}</div>` + `<div id="stats">${renderStats()}</div>`;
         document.getElementById('logout').onclick = async () => {
-          await api('POST', '/api/booth/logout'); location.reload();
+          stopIntervals();
+          try { await api('POST', '/api/booth/logout'); } catch (_) {}
+          me = null; students = []; recent = []; stats = null; etag = null;
+          showLogin();
         };
         const q = document.getElementById('q');
         let timer;
@@ -101,11 +123,12 @@
 
       function renderResults(query) {
         const out = document.getElementById('results');
-        const q = query.toLowerCase();
-        if (!q) { out.innerHTML = ''; return; }
-        const matches = students.filter(s =>
-          s.name.toLowerCase().includes(q) || s.class.toLowerCase().includes(q)
-        ).slice(0, 30);
+        const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+        if (!tokens.length) { out.innerHTML = ''; return; }
+        const matches = students.filter(s => {
+          const hay = (s.name + ' ' + s.class).toLowerCase();
+          return tokens.every(t => hay.includes(t));
+        }).slice(0, 30);
         out.innerHTML = matches.map(s => `
           <button class="w-full text-left bg-white border rounded-lg p-3 ${s.is_absent ? 'opacity-60' : ''}" data-id="${s.id}">
             <span class="font-medium">${s.name}</span>
@@ -200,19 +223,14 @@
         document.getElementById('login').onclick = async () => {
           try {
             await api('POST', '/api/booth/login', { code: document.getElementById('code').value });
-            location.reload();
+            await bootApp();
           } catch (e) { toast(e.message, 'error'); }
         };
       }
 
       (async () => {
-        try {
-          await Promise.all([loadMe(), loadStudents(), loadRecent(), loadStats()]);
-          render();
-          setInterval(async () => { await loadMe(); document.querySelector('header')?.replaceWith(document.createRange().createContextualFragment(renderHeader()).firstElementChild); }, 5000);
-          setInterval(async () => { await loadStats(); document.getElementById('stats').innerHTML = renderStats(); }, 30000);
-          setInterval(async () => { await loadRecent(); document.getElementById('recent').innerHTML = renderRecent(); }, 1000);
-        } catch { showLogin(); }
+        try { await bootApp(); }
+        catch { showLogin(); }
       })();
     });
   </script>

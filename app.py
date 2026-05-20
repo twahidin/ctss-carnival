@@ -70,5 +70,6 @@ for _path, _file in (
     ("/summary", "summary.html"),
     ("/booth-slides", "booth-slides.html"),
     ("/sec2-teacher", "sec2-teacher-slide.html"),
+    ("/sec2-student", "sec2-student-slide.html"),
 ):
     app.get(_path, include_in_schema=False)(_make_page_handler(_file))

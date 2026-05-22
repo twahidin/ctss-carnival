@@ -114,6 +114,37 @@ async def list_students(
     return [dict(r) for r in rows]
 
 
+class StudentCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    klass: str = Field(min_length=1, max_length=50, validation_alias="class")
+
+    model_config = {"populate_by_name": True}
+
+
+@router.post("/students")
+async def create_student(
+    body: StudentCreate, request: Request, _: dict = Depends(require_admin)
+) -> dict[str, Any]:
+    pool = request.app.state.pool
+    name = body.name.strip()
+    klass = body.klass.strip()
+    if not name or not klass:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Name and class are required"
+        )
+    default_tokens = int(
+        await _get_setting(pool, "default_tokens", str(DEFAULT_TOKENS))
+    )
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "INSERT INTO students (name, class, tokens) VALUES ($1, $2, $3) "
+            "RETURNING id, name, class, tokens, is_absent",
+            name, klass, default_tokens,
+        )
+    assert row is not None
+    return dict(row)
+
+
 @router.post("/booths")
 async def create_booth(
     body: BoothCreate, request: Request, _: dict = Depends(require_admin)
